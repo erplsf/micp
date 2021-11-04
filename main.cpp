@@ -8,6 +8,7 @@
 
 // TODO: switch from read/write to recv/sendv
 // TODO: use poll instead of select
+// TODO: use atomic<bool> to stop the read server
 
 using json = nlohmann::json;
 
