@@ -1,7 +1,10 @@
+#include <atomic>
 #include <iostream>
+#include <poll.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <thread>
 #include <unistd.h>
 
 #include <nlohmann/json.hpp>
@@ -30,9 +33,27 @@ void full_write(int sock, string data) {
   }
 }
 
-void full_read(int sock, char *buf, size_t size) {
+void serv_read(int sock, atomic<bool> &run) {
   // TODO: implement
-  auto chunk = read(sock, buf, size);
+  cout << "started read loop\n";
+  pollfd pfd{.fd = sock, .events = POLLIN};
+  while (run.load()) {
+    auto ready = poll(&pfd, 1, 1000);
+    if (ready == -1) {
+      perror("poll error: ");
+      exit(1);
+    } else if (ready == 1) {
+      cout << "got data on socket to read!\n";
+      const auto bufflen = 200;
+      char buff[bufflen + 1];
+      auto chunk = read(sock, buff, bufflen);
+
+      cout << "read:\n";
+      cout << buff;
+    } else if (ready == 0) {
+      cout << "timeout!\n";
+    }
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -56,22 +77,33 @@ int main(int argc, char *argv[]) {
     return -1;
   };
 
+  atomic<bool> run = true;
+
+  thread t(serv_read, sock, ref(run));
+
   json command = {{"command", {"get_property", "playback-time"}}};
   string str = command.dump() + "\n";
 
-  cout << "finished read\n";
+  sleep(2);
 
   full_write(sock, str);
+  cout << "finished write\n";
 
-  const size_t bufflen = 200;
-  char buff[bufflen + 1];
-  auto n = read(sock, buff, bufflen);
+  // const size_t bufflen = 200;
+  // char buff[bufflen + 1];
+  // auto n = read(sock, buff, bufflen);
 
-  cout << string(buff);
+  // cout << string(buff);
 
   // while (true) {
   //   sleep(1000);
   // }
+
+  sleep(2);
+
+  run.store(false);
+
+  t.join();
 
   return 0;
 }
